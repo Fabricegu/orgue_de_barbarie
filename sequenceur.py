@@ -2,6 +2,64 @@ import mido
 import time
 from threading import Thread, Event, Lock
 
+
+def list_and_choose_ports():
+    # Lister les ports d'entrée et de sortie
+    input_ports = mido.get_input_names()
+    output_ports = mido.get_output_names()
+
+    if not input_ports and not output_ports:
+        print("Aucun port MIDI disponible.")
+        return None, None
+
+    print("=== Ports MIDI d'entrée disponibles ===")
+    if input_ports:
+        for i, port in enumerate(input_ports):
+            print(f"{i + 1}: {port}")
+    else:
+        print("Aucun port d'entrée MIDI disponible.")
+
+    print("\n=== Ports MIDI de sortie disponibles ===")
+    if output_ports:
+        for i, port in enumerate(output_ports):
+            print(f"{i + 1}: {port}")
+    else:
+        print("Aucun port de sortie MIDI disponible.")
+
+    # Permettre à l'utilisateur de choisir un port de sortie
+    chosen_output_port = None
+    if output_ports:
+        while True:
+            try:
+                output_choice = int(input("\nChoisissez un port MIDI de sortie (par numéro) : "))
+                if 1 <= output_choice <= len(output_ports):
+                    chosen_output_port = output_ports[output_choice - 1]
+                    break
+                else:
+                    print("Numéro invalide. Réessayez.")
+            except ValueError:
+                print("Entrée non valide. Veuillez entrer un numéro.")
+
+    # Permettre à l'utilisateur de choisir un port d'entrée
+    chosen_input_port = None
+    if input_ports:
+        while True:
+            try:
+                input_choice = int(input("\nChoisissez un port MIDI d'entrée (par numéro) : "))
+                if 1 <= input_choice <= len(input_ports):
+                    chosen_input_port = input_ports[input_choice - 1]
+                    break
+                else:
+                    print("Numéro invalide. Réessayez.")
+            except ValueError:
+                print("Entrée non valide. Veuillez entrer un numéro.")
+
+    print(f"\nPort MIDI de sortie sélectionné : {chosen_output_port}")
+    print(f"Port MIDI d'entrée sélectionné : {chosen_input_port}")
+
+    return chosen_input_port, chosen_output_port
+
+'''
 # Lister les ports MIDI disponibles
 def list_ports():
     output_ports = mido.get_output_names()
@@ -24,7 +82,7 @@ def choose_port(ports):
                 print("Numéro invalide. Réessayez.")
         except ValueError:
             print("Entrée non valide. Veuillez entrer un numéro.")
-
+'''
 # Conversion des ticks MIDI en secondes
 def ticks_to_seconds(ticks, tempo, ticks_per_beat):
     return ticks * (tempo / 1_000_000) / ticks_per_beat
@@ -137,8 +195,20 @@ def play_midi_file_with_control(midi_file_path, output_port):
                     track_events.append((time_absolute, msg, i))  # Ajouter l'index de la piste
             tracks_events.extend(track_events)
 
+        # Afficher les 3 premiers événements de tracks_events
+        print("Les 3 premiers événements de tracks_events :")
+        #for event_time, msg, track_index in tracks_events[:3]:
+        for event_time, msg, track_index in tracks_events:
+            print(f"Temps absolu: {event_time}, Piste: {track_index}, Message: {msg}")
+
         # Trier tous les événements par temps absolu
         tracks_events.sort(key=lambda x: x[0])
+
+        # Afficher les 3 premiers événements de tracks_events
+        print("Les 3 premiers événements de tracks_events :")
+        #for event_time, msg, track_index in tracks_events[:3]:
+        for event_time, msg, track_index in tracks_events:
+            print(f"Temps absolu: {event_time}, Piste: {track_index}, Message: {msg}")
 
         # Lecture des événements
         start_time = time.time()
@@ -149,7 +219,7 @@ def play_midi_file_with_control(midi_file_path, output_port):
             current_time = time.time()
             wait_time = ticks_to_seconds(event_time, tempo, ticks_per_beat) - (current_time - start_time)
             if wait_time > 0:
-                print(f"Attendre {wait_time:.3f} secondes...")
+                #print(f"Attendre {wait_time:.3f} secondes...")
                 time.sleep(wait_time)
 
             # Attendre si en pause
@@ -184,20 +254,26 @@ def play_midi_file_with_control(midi_file_path, output_port):
 # Programme principal
 if __name__ == "__main__":
     # Lister et sélectionner un port MIDI
-    ports = list_ports()
-    if not ports:
+    #ports = list_ports()
+    input_port, output_port = list_and_choose_ports()
+    if not input_port and not output_port:
         print("Aucun port MIDI disponible. Assurez-vous que FluidSynth ou un autre périphérique MIDI est actif.")
         exit(1)
 
-    chosen_port = choose_port(ports)
-    print(f"Port MIDI sélectionné : {chosen_port}")
+    #chosen_port = choose_port(ports)
+    #print(f"Port MIDI sélectionné : {chosen_port}")
+    #chosen_output_port = choose_port(ports)
+    #print(f"Port MIDI de sortie sélectionné : {output_port}")
+
+    #chosen_input_port = choose_port(ports)
+    #print(f"Port MIDI d'entrée sélectionné : {input_port}")
 
     # Chemin du fichier MIDI à lire
     midi_file_path = input("Entrez le chemin du fichier MIDI à lire : ")
 
     # Lecture synchronisée des pistes avec contrôle interactif
     try:
-        play_midi_file_with_control(midi_file_path, chosen_port)
+        play_midi_file_with_control(midi_file_path, output_port)
     except FileNotFoundError:
         print(f"Erreur : Le fichier {midi_file_path} est introuvable.")
     except Exception as e:
