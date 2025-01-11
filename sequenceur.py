@@ -149,6 +149,7 @@ def play_midi_file_with_control(midi_file_path, output_port):
             current_time = time.time()
             wait_time = ticks_to_seconds(event_time, tempo, ticks_per_beat) - (current_time - start_time)
             if wait_time > 0:
+                print(f"Attendre {wait_time:.3f} secondes...")
                 time.sleep(wait_time)
 
             # Attendre si en pause
