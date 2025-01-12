@@ -2,6 +2,21 @@ import mido
 import time
 from threading import Thread, Event, Lock
 
+# Classe pour gérer le compteur de ticks MIDI
+class MidiTickCounter:
+    def __init__(self):
+        self.tick_count = 0
+        self.lock = Lock()
+
+    def increment(self):
+        with self.lock:
+            self.tick_count += 5
+
+    def get_tick_count(self):
+        with self.lock:
+            return self.tick_count
+
+# Lister et choisir les ports MIDI
 
 def list_and_choose_ports():
     # Lister les ports d'entrée et de sortie
@@ -86,6 +101,21 @@ def choose_port(ports):
 # Conversion des ticks MIDI en secondes
 def ticks_to_seconds(ticks, tempo, ticks_per_beat):
     return ticks * (tempo / 1_000_000) / ticks_per_beat
+
+# Thread pour écouter les messages MIDI d'entrée et incrémenter le compteur
+def midi_input_listener(input_port, tick_counter, stop_event):
+    try:
+        with mido.open_input(input_port) as inport:
+            print(f"Réception des messages MIDI depuis : {input_port}")
+            for msg in inport:
+                if stop_event.is_set():
+                    break
+                if msg.type == 'note_on':  # Exemple : chaque message note_on correspond à une impulsion
+                    tick_counter.increment()  # Incrémenter le compteur
+                    print(f"Tick MIDI reçu : compteur = {tick_counter.get_tick_count()}")
+    except Exception as e:
+        print(f"Erreur lors de la réception des messages MIDI : {e}")
+
 
 # Envoyer une commande "Panic" pour arrêter toutes les notes
 def send_panic(outport):
@@ -179,6 +209,14 @@ def play_midi_file_with_control(midi_file_path, output_port):
     user_input_thread = Thread(target=handle_user_input, args=(active_tracks, track_channels, transpose, mido.open_output(output_port), stop_event, pause_event, lock))
     user_input_thread.start()
 
+
+    # Créer un compteur de ticks
+    tick_counter = MidiTickCounter()
+
+    # Lancer le thread d'écoute MIDI
+    input_thread = Thread(target=midi_input_listener, args=(input_port, tick_counter, stop_event))
+    input_thread.start()
+
     # Fusionner les événements de toutes les pistes
     with mido.open_output(output_port) as outport:
         print(f"Envoi des notes au port MIDI : {output_port}")
@@ -210,6 +248,7 @@ def play_midi_file_with_control(midi_file_path, output_port):
         #for event_time, msg, track_index in tracks_events:
             print(f"Temps absolu: {event_time}, Piste: {track_index}, Message: {msg}")
 
+        '''
         # Lecture des événements
         start_time = time.time()
         for event_time, msg, track_index in tracks_events:
@@ -246,6 +285,42 @@ def play_midi_file_with_control(midi_file_path, output_port):
                 if not msg.is_meta:
                     outport.send(msg)
                     #print(f"Envoyé (Event_time {event_time}, Piste {track_index + 1}, Canal {msg.channel if hasattr(msg, 'channel') else 'N/A'}): {msg}")
+        '''
+
+        # Lecture des événements
+        for event_time, msg, track_index in tracks_events:
+            if stop_event.is_set():
+                break
+
+            #print("tick_counter.get_tick_count() : ", tick_counter.get_tick_count())
+            # Attendre que le compteur atteigne la position de l'événement
+            while tick_counter.get_tick_count() < event_time:
+                if stop_event.is_set():
+                    break
+                time.sleep(0.01)
+
+            # Attendre si en pause
+            while not pause_event.is_set():
+                if stop_event.is_set():
+                    break
+                time.sleep(0.1)
+
+            # Ignorer l'événement si la piste est désactivée
+            if not active_tracks[track_index]:
+                continue
+
+            # Appliquer la transposition si applicable
+            if msg.type in ('note_on', 'note_off'):
+                transposed_note = msg.note + transpose[0]
+                if 0 <= transposed_note <= 127:
+                    msg = msg.copy(note=transposed_note)
+
+            #print(f"Envoyé (Event_time {event_time}, Piste {track_index + 1}, Canal {msg.channel if hasattr(msg, 'channel') else 'N/A'}): {msg}")
+            #print("msg : ", msg)
+            # Envoyer l'événement MIDI
+            if not msg.is_meta:
+                outport.send(msg)
+                print(f"Envoyé (Event_time {event_time}, Piste {track_index + 1}, Canal {msg.channel if hasattr(msg, 'channel') else 'N/A'}): {msg}")
 
     # Attendre la fin du thread de commande utilisateur
     stop_event.set()
